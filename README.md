@@ -1,0 +1,65 @@
+# Atlas 本地空间工作台
+
+在 Windows 中双击 **启动工作台.cmd**，或在本目录运行 `npm start`，然后打开 [本地编辑器](http://127.0.0.1:4317/)。已有依赖时，打开项目、编辑白模、调光、取景、保存检查点和导出都可以离线完成。新电脑需要 Node.js 22.13 或更高版本，首次运行先执行 `npm ci`。
+
+## 用一句话建模
+
+1. 在「模型服务」配置 MiniMax 中国站 API Key、DeepSeek API Key，或填写阿里云百炼北京地域的 Workspace ID 和 API Key。
+2. 打开「文字建模 · Three.js」，选择 MiniMax、DeepSeek 或通义千问。MiniMax 默认使用 M3.1-Flash，也可切换为 M3。选「新建模型」并描述尺寸、构件和材质，例如「建一座长 6 米、宽 4 米的木亭，四根柱子、双坡屋顶，东侧加三级台阶」。
+3. 生成后点「回到场景」。可在「白模」逐件调节位置、尺寸、旋转和材质色。再次进入「文字建模」可对同一模型续改，例如「保留刚调好的柱子，把屋檐向外伸 50 厘米」。工作台将当前构件随描述一并发送。等待期间自己又改过原模型，可把返回结果单独加入场景。
+4. 项目保存模型、提示词草稿和任务记录。任务中的「下载 Three.js 模型」导出该次生成版本。「导出」中的 Three.js 模块或 GLB 导出整个场景当前的编辑结果。导出的 JS 模块可在引用 `three` 的项目中调用 `scene.add(buildModel())`。
+
+每次提交向所选模型发送一次对话请求。本地用 Three.js 创建网格，支持方体、圆柱、圆锥、球、圆环、轮廓挤出、轮廓旋转以及自定义顶点和三角面。每次生成最多 96 个可编辑构件。[DeepSeek 结构化输出](https://api-docs.deepseek.com/guides/json_mode/) · [阿里云百炼结构化输出](https://help.aliyun.com/zh/model-studio/qwen-structured-output)
+
+## 断点续作
+
+- **接着上次的位置编辑**。工作台自动保存当前项目、场景物体、材质、光照、相机、关键帧、选中的工具、项目素材和生成表单。重新打开同一地址会恢复最近使用的项目。生成面板打开时退出，下次会回到该面板与相应草稿。右上角显示「已保存到本机」时，项目已写入磁盘。
+- **回到某个创作阶段**。点击顶部「检查点」，输入名称并保存。点击某个版本的「从此继续」，会打开一个新项目副本。原项目可从顶部项目选择器再次打开。
+- **继续云任务**。提交前先保存任务与请求编号。已取得操作编号的任务重开项目后会继续查询。若网页在等待首次回复时关闭，本地服务仍可接收并保存回执；重开后按原编号读取。若服务自身中断且第三方尚未返回编号，任务会显示待核对。此时先到供应商查询记录，避免重复计费。
+- **断开本地服务时的编辑**。待写入的编辑暂存在浏览器。使用同一浏览器和地址重开，工作台会尝试恢复。检测到另一窗口有更新时，会保留恢复副本。浏览器存储和磁盘空间均会影响恢复能力。
+- **迁移到另一台电脑**。在「导出」中选择「导出项目与本地素材」。在另一台电脑的工作台选择「从 .atlas.json 导入项目」。该文件带有当前场景、机位、生成草稿和已保存的本地素材。完整迁移命名检查点、多个项目及提交回执时，关闭服务后备份数据目录。尚在供应商处的资产仍取决于原项目权限和保留期。
+
+## 模型服务
+
+在顶部「模型服务」填写所需密钥。配置保存在本机 `data/providers.json`，其中的密钥为明文。也可复制 `.env.example` 为 `.env` 后填写环境变量并重启。界面中保存的非空配置优先生效。服务绑定 `127.0.0.1`。
+
+| 服务 | 可选任务 | 配置 |
+| --- | --- | --- |
+| MiniMax 中国站 | 使用 M3.1-Flash 或 M3 创建、续改 Three.js 模型 | 设置 MiniMax API Key 或环境变量 `MINIMAX_API_KEY`。[MiniMax 官方接口](https://platform.minimax.cn/docs/api-reference/text-openai-api) |
+| DeepSeek | 文字创建和续改 Three.js 模型 | `DEEPSEEK_API_KEY` |
+| 通义千问 | 文字建模，支持 Qwen3-Coder-Flash、Qwen-Plus | 与下方通义万相共用北京地域的百炼密钥和工作空间 |
+| World Labs Atlas | 文生图、相机位姿与深度估计、新视角、Chisel 编辑、Gaussian splat 重建、splat 转 GLB | Atlas 项目 API key，或 `ATLAS_API_KEY` / `WLT_API_KEY` |
+| Images API 兼容服务 | 文生图；模型、数量和支持的尺寸取决于服务商 | API 基础地址、图像模型名、服务密钥。基础地址示例为 `https://api.openai.com/v1` |
+| 阿里通义万相 2.6 | 文生图，单次 1–4 张，可选尺寸 | 北京地域百炼 API Key 与 Workspace ID，可使用环境变量 `DASHSCOPE_API_KEY` 和 `DASHSCOPE_WORKSPACE_ID` |
+| 腾讯混元 3D 专业版 | 文字或单张参考图生成三维模型，3.0 / 3.1，可选带纹理或白模 | 已开通混元生 3D 的腾讯云 SecretId 和 SecretKey，或 `TENCENTCLOUD_SECRET_ID`、`TENCENTCLOUD_SECRET_KEY` |
+| Meshy | 单张参考图生成 GLB 模型，可选纹理 | Meshy API key 或 `MESHY_API_KEY` |
+
+Atlas 任务使用项目密钥的任务、资产和操作权限。第三方文生图服务需要实现 `POST /images/generations` 并返回图像 URL 或 Base64。Meshy 图生 3D 生成物体网格，适合单物体素材。点击「提交任务」会把所选输入发送到对应服务并可能产生费用。[Atlas 任务与权限](https://docs.atlas.worldlabs.ai/authentication) · [Atlas 计费](https://docs.atlas.worldlabs.ai/billing) · [Meshy 图生 3D](https://docs.meshy.ai/en/api/image-to-3d)
+
+### 选择国产模型
+
+在「模型服务」保存对应的凭据。在「生成任务 → 文生图 → 推理服务」选择「阿里通义万相 2.6」，或在「生成任务 → 混元 3D」选择文字、参考图和模型版本。国产服务的任务编号也保存在项目里，重开后可用原编号继续查询。万相使用百炼北京业务空间，混元使用国内站广州地域。两家的任务查询均有有效期，请及时把结果存入项目。混元提供的 GLB 可以在素材面板预览，OBJ 压缩包可下载。[通义万相文生图接口](https://help.aliyun.com/zh/model-studio/text-to-image-v2-api-reference) · [混元 3D 提交接口](https://cloud.tencent.com/document/product/1804/123447) · [混元 3D 查询接口](https://cloud.tencent.com/document/product/1804/123448)
+
+## 从照片开始
+
+1. 点击「导入素材」，选择同一空间中视野重叠的照片。在「生成任务 → 图像重建」选择照片并提交。
+2. 展开完成的任务，点击「打开重建点云取景」。拖动视角、选择机位，然后点击「采用此机位」。点云预览最多采样 16 帧、32 万个点。
+3. 在「生成新视角」勾选带深度的参考帧。可选择相对参考帧平移、当前机位或保存的相机路径。生成帧可逐张下载或保存为项目素材。
+4. 在「生成 Splat」选择符合要求的带线性深度帧。将结果存入项目后可预览，或在「转换网格」中生成 GLB。[Atlas 官方工作流](https://docs.atlas.worldlabs.ai/how-to-use-atlas)
+
+## 从白模开始
+
+进入「白模」，添加方体、圆柱和球体，编辑位置、尺寸与颜色。在「光照」调整太阳方向、高度和强度。在视口中拖动旋转、按 Shift 拖动平移，滚轮缩放。使用「保存机位」制作相机路径。「Chisel 编辑」可使用当前白模的真实深度和相机参数生成外观，也可为已定位视图绘制局部编辑遮罩。[Chisel 操作指南](https://docs.atlas.worldlabs.ai/atlas-chisel-tutorial)
+
+## 查看与导出
+
+- 项目素材支持图片、视频、GLB，以及 SPZ、PLY、SPLAT 和 KSPLAT。三维模型预览需要浏览器支持 WebGL 2。可调节模型预览的亮度、色调并导出 PNG。
+- 白模可导出 OBJ、PNG 和相机参数。相机路径可录制为 WebM；生成的图片序列可选择帧顺序与帧率并编码为 WebM。录制期间保持页面可见。
+- 本地白模、RGBD 点云、模型预览和调色由本机执行。本实现未接入 Frameboy 实时云流、官方 Relight 推理、World Labs 账号和订阅后台。原站登录后的完整交互仍待逐项对照。公开入口证据见同目录的 REA 核验记录。
+
+## 数据和验证
+
+默认数据目录为 `data/`。项目、素材、检查点和任务回执分别位于 `projects/`、`assets/`、`checkpoints/`、`receipts/`。设定 `ATLAS_DATA_DIR` 可更改数据位置。更改默认端口可设定 `PORT`。
+
+`npm test` 覆盖接口请求、幂等回执、异常恢复、并发保存、检查点，以及浏览器中的工作流。整页重启测试为 `node scripts/check-studio.cjs`，需要 Playwright 和 Chromium；可用 `ATLAS_TEST_PLAYWRIGHT` 和 `ATLAS_TEST_BROWSER` 指定本机安装。测试使用临时数据目录与模拟服务，不使用供应商额度。
+

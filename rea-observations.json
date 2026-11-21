@@ -1,0 +1,184 @@
+[
+  {
+    "evidence_id": "ev_f584cda78d1705977eb55df0a1715716f9ed1783fd65e1e451b345433b59a50a",
+    "provider": {
+      "id": "rea-playwright-browser-scenario",
+      "name": "REA Playwright browser scenario capture provider",
+      "version": "1"
+    },
+    "browser": {
+      "mode": "launch",
+      "process_ownership": "provider-owned",
+      "cleanup": "terminated-owned-process",
+      "product": "Chromium",
+      "version": "158.0.4370.33"
+    },
+    "actions": [
+      {
+        "step_id": "entry",
+        "timeout_ms": 15000,
+        "action": "wait_for",
+        "locator": {
+          "kind": "css",
+          "selector": "body"
+        },
+        "state": "visible"
+      }
+    ],
+    "steps": [
+      {
+        "id": "scenario_start",
+        "status": "completed",
+        "url": "https://atlas.worldlabs.ai/sign-in?redirect=%2F",
+        "accessibility": null
+      },
+      {
+        "id": "entry",
+        "status": "completed",
+        "url": "https://atlas.worldlabs.ai/sign-in?redirect=%2F",
+        "accessibility": null
+      }
+    ],
+    "completeness": {
+      "status": "complete",
+      "equality_eligible": true,
+      "missing_sections": [],
+      "truncated_sections": []
+    }
+  },
+  {
+    "evidence_id": "ev_0600f55c2ae529047e5e5258114095fce4248605e696e50dcd974538414f71bd",
+    "provider": {
+      "id": "rea-playwright-browser-scenario",
+      "name": "REA Playwright browser scenario capture provider",
+      "version": "1"
+    },
+    "browser": {
+      "mode": "launch",
+      "process_ownership": "provider-owned",
+      "cleanup": "terminated-owned-process",
+      "product": "Chromium",
+      "version": "158.0.4370.33"
+    },
+    "actions": [
+      {
+        "step_id": "entry-controls",
+        "timeout_ms": 20000,
+        "action": "wait_for",
+        "locator": {
+          "kind": "css",
+          "selector": "button"
+        },
+        "state": "visible"
+      }
+    ],
+    "steps": [
+      {
+        "id": "scenario_start",
+        "status": "completed",
+        "url": "https://atlas.worldlabs.ai/sign-in?redirect=%2F",
+        "accessibility": null
+      },
+      {
+        "id": "entry-controls",
+        "status": "completed",
+        "url": "https://atlas.worldlabs.ai/sign-in?redirect=%2F",
+        "accessibility": {
+          "sha256": "6bd472ff3f303a61c0e4a26d263166b018f24bf9bcaa786517db6cd4a2c484bc",
+          "bytes": 102,
+          "text": "- document:\n  - main:\n    - link \"World Labs\":\n      - /url: https://worldlabs.ai\n    - button \"ENTER\""
+        }
+      }
+    ],
+    "completeness": {
+      "status": "complete",
+      "equality_eligible": true,
+      "missing_sections": [],
+      "truncated_sections": []
+    }
+  },
+  {
+    "evidence_id": "ev_fc67f2b19fb97c97d2fb2c4def8709c830ca4437d69873014e0ee8561c2ce5ab",
+    "provider": {
+      "id": "rea-playwright-browser-scenario",
+      "name": "REA Playwright browser scenario capture provider",
+      "version": "1"
+    },
+    "browser": {
+      "mode": "launch",
+      "process_ownership": "provider-owned",
+      "cleanup": "terminated-owned-process",
+      "product": "Chromium",
+      "version": "158.0.4370.33"
+    },
+    "actions": [
+      {
+        "step_id": "widget-loaded",
+        "timeout_ms": 30000,
+        "action": "wait_for",
+        "locator": {
+          "kind": "css",
+          "selector": "form.cl-form"
+        },
+        "state": "attached"
+      },
+      {
+        "step_id": "enter",
+        "timeout_ms": 10000,
+        "action": "click",
+        "locator": {
+          "kind": "css",
+          "selector": "button.atlas-enter"
+        },
+        "button": "left",
+        "click_count": 1
+      },
+      {
+        "step_id": "verify-form",
+        "timeout_ms": 10000,
+        "action": "wait_for",
+        "locator": {
+          "kind": "css",
+          "selector": "input[name=identifier]"
+        },
+        "state": "visible"
+      }
+    ],
+    "steps": [
+      {
+        "id": "scenario_start",
+        "status": "completed",
+        "url": "https://atlas.worldlabs.ai/sign-in?redirect=%2F",
+        "accessibility": null
+      },
+      {
+        "id": "widget-loaded",
+        "status": "completed",
+        "url": "https://atlas.worldlabs.ai/sign-in?redirect=%2F",
+        "accessibility": null
+      },
+      {
+        "id": "enter",
+        "status": "completed",
+        "url": "https://atlas.worldlabs.ai/sign-in?redirect=%2F",
+        "accessibility": null
+      },
+      {
+        "id": "verify-form",
+        "status": "completed",
+        "url": "https://atlas.worldlabs.ai/sign-in?redirect=%2F",
+        "accessibility": {
+          "sha256": "ae1033f4a3df539ba39ce7fcec296b4725328855094f3e41232f81f242469ced",
+          "bytes": 349,
+          "text": "- document:\n  - main:\n    - link \"World Labs\":\n      - /url: https://worldlabs.ai\n    - heading \"Sign in to World Labs\" [level=1]\n    - button \"Continue with Google\"\n    - paragraph: or\n    - text: Email address\n    - textbox \"Email address\":\n      - /placeholder: Enter your email address\n    - button \"Continue\":\n      - text: Continue\n      - img"
+        }
+      }
+    ],
+    "completeness": {
+      "status": "complete",
+      "equality_eligible": true,
+      "missing_sections": [],
+      "truncated_sections": []
+    }
+  }
+]

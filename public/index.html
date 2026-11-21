@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#151b20">
+<title>Atlas · 空间工作台</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23202b2b'/%3E%3Cpath d='M5 24 15 6h3l9 18h-4L16 11l-7 13Z' fill='%239ce4cc'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/studio.css"><link rel="stylesheet" href="/workflows.css">
+<script type="importmap">{"imports":{"three":"/vendor/three/build/three.module.js","three/addons/":"/vendor/three/examples/jsm/","@sparkjsdev/spark":"/vendor/spark/spark.module.js"}}</script>
+</head>
+<body>
+<header class="head">
+<div class="brand"><span class="brandmark" aria-hidden="true"></span><strong>Atlas</strong><span class="brand-divider"></span><span>空间工作台</span></div>
+<div class="project-nav"><span class="ico" data-icon="folder"></span><select id="projects" aria-label="切换项目"></select><button class="icon-btn" data-action="project-create" title="新建项目" aria-label="新建项目">＋</button></div>
+<div class="head-actions"><span id="save-state" aria-live="polite"></span><button class="secondary" data-action="checkpoints" title="创作检查点"><i data-icon="layers"></i><span>检查点</span></button><button class="secondary" data-action="settings"><i data-icon="sliders"></i><span>模型服务</span></button><button class="primary" data-action="workflows"><i data-icon="spark"></i>生成任务</button></div>
+</header>
+<div class="workspace">
+<nav class="tools" aria-label="工具"><button class="tool active" data-mode="view"><i data-icon="aperture"></i>取景</button><button class="tool" data-mode="edit"><i data-icon="cube"></i>白模</button><button class="tool" data-mode="light"><i data-icon="sun"></i>光照</button><button class="tool" data-mode="mesh"><i data-icon="mesh"></i>网格</button><div class="spacer"></div><button class="tool" data-action="shortcuts"><i data-icon="keyboard"></i>操作</button></nav>
+<main>
+<div class="view-head"><div><span class="path">工作空间 <b> / </b> <span id="scene-name"></span></span><h1 id="mode-title">场景取景器</h1></div><div class="toolbar"><button class="secondary" data-action="import"><i data-icon="upload"></i>导入素材</button><button class="secondary" data-action="export"><i data-icon="download"></i>导出</button></div></div>
+<section class="viewport" id="view-wrap" aria-label="三维视口"><canvas id="scene" tabindex="0" aria-label="三维场景，拖动旋转，滚轮缩放"></canvas><div class="view-chip"><span class="live-dot"></span>透视视图</div><div class="view-buttons"><button class="icon-btn" data-action="grid" title="显示或隐藏网格" aria-label="网格开关"><i data-icon="grid"></i></button><button class="icon-btn" data-action="reset-camera" title="重置相机" aria-label="重置相机"><i data-icon="focus"></i></button><button class="icon-btn" data-action="fullscreen" title="视口全屏" aria-label="视口全屏"><i data-icon="expand"></i></button></div><span class="view-hint">拖动旋转 · Shift 拖动平移 · 滚轮缩放</span><span class="axis">Y ↑</span></section>
+<section class="sequencer"><div class="section-line"><h2><i data-icon="film"></i>相机路径 <em id="camera-count"></em></h2><div class="toolbar"><button class="text-btn" data-action="play" title="播放相机路径"><i data-icon="play"></i><span id="play-label">播放</span></button><button class="secondary small" data-action="add-camera">＋ 保存机位</button></div></div><div id="camera-strip" class="camera-strip"></div></section>
+</main>
+<aside><div class="side-tabs" role="group" aria-label="侧栏"><button data-tab="inspector" class="selected">检查器</button><button data-tab="assets">素材</button><button data-tab="jobs">任务</button></div><div id="side-content"></div></aside>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+<input id="import-file" type="file" hidden multiple accept="image/png,image/jpeg,image/webp,image/gif,image/avif,video/mp4,video/webm,.glb,.spz,.splat,.ksplat,.ply,.exr">
+<dialog id="dialog"><div class="dialog-head"><h2 id="dialog-title"></h2><button class="icon-btn" data-action="close" aria-label="关闭">✕</button></div><div id="dialog-content"></div></dialog>
+<dialog id="generate-dialog"><div class="dialog-head"><h2><i data-icon="spark"></i>生成任务</h2><button class="icon-btn" data-action="close-workflows" aria-label="关闭生成任务">✕</button></div><div id="workflow-root"></div></dialog>
+<script type="module" src="/app.js"></script>
+</body></html>
