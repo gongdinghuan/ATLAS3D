@@ -8,8 +8,11 @@ globalThis.fetch=async(url,options)=>{
  const keys={'api.deepseek.com':'fixture-model','ws-smoke.cn-beijing.maas.aliyuncs.com':'fixture-wan','api.minimax.cn':'fixture-minimax'};
  if(!Object.hasOwn(keys,host))return originalFetch(url,options);
  if(options.headers.Authorization!=='Bearer '+keys[host])throw Error('测试仅允许该服务的模拟凭据');
- const body=JSON.parse(options.body),input=JSON.parse(body.messages[1].content);
- await fs.appendFile(path.join(root,'chat-requests.jsonl'),JSON.stringify({host,model:body.model,input})+'\n');
+ const body=JSON.parse(options.body),content=body.messages[1].content;
+ const input=JSON.parse(Array.isArray(content)?content.find(c=>c.type==='text').text:content);
+ const image=Array.isArray(content)&&content.find(c=>c.type==='image_url')?.image_url;
+ const imageHash=image?require('node:crypto').createHash('sha256').update(image.url).digest('hex'):null;
+ await fs.appendFile(path.join(root,'chat-requests.jsonl'),JSON.stringify({host,model:body.model,input,imageHash,detail:image?.detail,fine:body.messages[0].content.includes('精细建模。')})+'\n');
  if(input.request==='等待时手动改色'){
   for(let i=0;i<300;i++){
    try{await fs.access(path.join(root,'reply-now'));break}catch{await new Promise(ok=>setTimeout(ok,100))}

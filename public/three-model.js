@@ -11,7 +11,14 @@ function makeMesh(THREE,part){
   case 'SphereGeometry':geometry=new THREE.SphereGeometry(.5,20,12);break;
   case 'TorusGeometry':geometry=new THREE.TorusGeometry(.4,.1,10,24);break;
   case 'ExtrudeGeometry':{
-   const shape=new THREE.Shape(part.profile.map(([x,y])=>new THREE.Vector2(x,y)));
+   const ring=points=>points.map(([x,y])=>new THREE.Vector2(x,y));
+   const outline=ring(part.profile);
+   if(!THREE.ShapeUtils.isClockWise(outline))outline.reverse();
+   const shape=new THREE.Shape(outline);
+   for(const points of part.holes||[]){
+    const hole=ring(points);if(THREE.ShapeUtils.isClockWise(hole))hole.reverse();
+    shape.holes.push(new THREE.Path(hole));
+   }
    geometry=new THREE.ExtrudeGeometry(shape,{depth:1,steps:1,bevelEnabled:false});break;
   }
   case 'LatheGeometry':geometry=new THREE.LatheGeometry(part.profile.map(([r,y])=>new THREE.Vector2(r,y)),24);break;

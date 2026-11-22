@@ -40,6 +40,9 @@ const instructions=[
 ].join('\n');
 export async function generateModel(provider,task,input,mediaDirectory){
  if(task!=='threeModel')throw fail(400,'语言模型只接受 Three.js 建模任务');
+ const quality=input?.modelDetail??'standard';
+ if(!['standard','fine'].includes(quality))throw fail(400,'请选择标准或精细建模');
+ const fine=quality==='fine';
  const hasImage=input?.referenceImage!==undefined;
  const prompt=typeof input?.prompt==='string'?input.prompt.trim():'';
  if(!hasImage&&!prompt)throw fail(400,'请填写建模描述或选择参考图');
@@ -53,9 +56,12 @@ export async function generateModel(provider,task,input,mediaDirectory){
  if(hasImage&&provider==='qwen'&&model!=='qwen3-vl-plus')throw fail(400,'千问参考图建模请选择 Qwen3-VL-Plus');
  const request=prompt||'依据参考图建立可编辑的三维模型。';
  const text=JSON.stringify({request,...(previous?{previous}:{})});
- const contentBlocks=hasImage?[{type:'text',text},{type:'image_url',image_url:{url:await inlineReference(mediaDirectory,input.referenceImage)}}]:text;
+ const contentBlocks=hasImage?[{type:'text',text},{type:'image_url',image_url:{url:await inlineReference(mediaDirectory,input.referenceImage),...(fine&&provider!=='qwen'?{detail:'high'}:{})}}]:text;
  const visualGuide='观察参考图中的主体、轮廓、构件连接、比例和材质，优先表达这些可辨认特征。按文字给出的实际尺寸建模，未给尺寸时估算。续改已有模型时，仅按用户要求调整。';
- const payload={model,...service.options(model),messages:[{role:'system',content:hasImage?instructions+'\n'+visualGuide:instructions},{role:'user',content:contentBlocks}]};
+ const guides=[instructions,'挤出构件可指定 holes:[[[x,y],...],...] 表示贯穿开孔。所有孔在外轮廓内部且不相交，最多 12 个。'];
+ if(hasImage)guides.push(visualGuide);
+ if(fine)guides.push('精细建模。先校核主体的比例与结构连接，再用可独立编辑的构件表达看得见的檐口、窗框、栏杆或材质边界。窗洞使用 holes，通向边界的门洞用带凹口的外轮廓。重复构件用 repeat。依据主体选择有辨识度的细节，不必用完构件额度，保持原模型坐标。');
+ const payload={model,...service.options(model),messages:[{role:'system',content:guides.join('\n')},{role:'user',content:contentBlocks}]};
  let response;
  try{response=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify(payload),redirect:'error',signal:AbortSignal.timeout(180000)})}
  catch{throw fail(502,'语言模型请求中断，请核对本地回执与供应商记录')}

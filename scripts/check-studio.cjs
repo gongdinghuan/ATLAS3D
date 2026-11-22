@@ -93,9 +93,20 @@ async function stop(){if(server && server.exitCode===null){const exit=new Promis
  await click('close');await saved();await page.reload();await page.locator('[data-object-prop=ry]').waitFor();
  assert.equal(+await rotation.inputValue(),25);await click('three-task');assert.equal(await field('建模目标').inputValue(),groupId);
  await field('建模大模型').selectOption('minimax');assert.equal(await field('MiniMax 模型').inputValue(),'MiniMax-M3.1-Flash');
- await field('MiniMax 模型').selectOption('MiniMax-M3');await saved();await page.close();await stop();await start();
+ const referenceBytes=Buffer.from(await page.evaluate(()=>{
+  const c=document.createElement('canvas');c.width=240;c.height=180;
+  const g=c.getContext('2d');g.fillStyle='#aaa';g.fillRect(30,40,180,120);g.clearRect(100,70,40,50);
+  return c.toDataURL('image/png').split(',')[1];
+ }),'base64');
+ await page.getByLabel('上传建模参考图').setInputFiles({name:'开窗立面.png',mimeType:'image/png',buffer:referenceBytes});
+ await page.getByAltText('建模参考图预览').waitFor();
+ const imageURL=await page.getByAltText('建模参考图预览').getAttribute('src');
+ await page.getByRole('button',{name:'移除参考图'}).click();await field('从项目素材选择').selectOption(imageURL);
+ await page.getByAltText('建模参考图预览').waitFor();
+ await field('建模细节').selectOption('fine');await field('MiniMax 模型').selectOption('MiniMax-M3');await saved();await page.close();await stop();await start();
  page=await ctx.newPage();observe(page);await page.goto(url);await page.locator('#generate-dialog[open]').waitFor();
  assert.equal(await field('建模大模型').inputValue(),'minimax');assert.equal(await field('MiniMax 模型').inputValue(),'MiniMax-M3');
+ assert.equal(await field('建模细节').inputValue(),'fine');assert.equal(await page.getByAltText('建模参考图预览').getAttribute('src'),imageURL);
  const restoredSettings=await(await page.request.get(url+'/api/settings')).json();
  assert.equal(restoredSettings.minimaxConfigured,true);assert.ok(!JSON.stringify(restoredSettings).includes('fixture-minimax'));
  await field('建模描述').fill('等待时手动改色');await page.locator('.wf-primary').click();await waitFor(()=>requests().length===3);
@@ -108,6 +119,13 @@ async function stop(){if(server && server.exitCode===null){const exit=new Promis
  const modelObjects=allProjects.find(p=>p.id===activeProject).scene.objects.filter(o=>o.type==='three');
  assert.equal(modelObjects.length,2);assert.equal(modelObjects.find(o=>o.group===groupId).color,'#123456');
  const miniRequest=requests()[2];assert.equal(miniRequest.host,'api.minimax.cn');assert.equal(miniRequest.model,'MiniMax-M3');assert.equal(miniRequest.input.previous.parts[0].rotation[1],25);
- assert.equal(requests().length,3);console.log('已验证 DeepSeek 首次建模、千问 Coder 根据手改续作、JS 与 GLB 导出、MiniMax 配置及模型选择重启恢复、MiniMax 跨模型续改并从回执保留冲突版本。');
+ const expectedHash=require('node:crypto').createHash('sha256').update('data:image/png;base64,'+referenceBytes.toString('base64')).digest('hex');
+ assert.equal(miniRequest.imageHash,expectedHash);assert.equal(miniRequest.detail,'high');assert.equal(miniRequest.fine,true);
+ await field('建模大模型').selectOption('qwen');await field('建模目标').selectOption('new');await field('建模描述').fill('');
+ await page.locator('.wf-primary').click();await waitFor(()=>requests().length===4);
+ await waitFor(async()=>{const list=await(await page.request.get(url+'/api/projects')).json();return list.find(p=>p.id===activeProject).jobs.some(j=>j.response?.model==='qwen3-vl-plus'&&j.modelApplied)});
+ const visualRequest=requests()[3];assert.equal(visualRequest.model,'qwen3-vl-plus');assert.equal(visualRequest.imageHash,expectedHash);assert.equal(visualRequest.input.previous,undefined);
+ console.log('已验证参考图预览、移除与复用、重启恢复、精细带图续改及纯图片新建。');
+ console.log('已验证 DeepSeek 首次建模、千问 Coder 根据手改续作、JS 与 GLB 导出、MiniMax 配置及模型选择重启恢复、MiniMax 跨模型续改并从回执保留冲突版本。');
  assert.deepEqual(errors,[]);console.log('已验证本地素材、OBJ 导出、模型配置和窄屏布局。');
 })().catch(e=>{console.error(e);process.exitCode=1}).finally(async()=>{completeImage?.();await browser?.close();await stop();imageService.closeAllConnections();imageService.close()});

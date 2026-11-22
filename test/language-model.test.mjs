@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {Raycaster,Vector3} from 'three';
 import assert from 'node:assert/strict';
 import {handleProvider} from '../providers.mjs';
 import {validateModel,modelParts,readPart} from '../public/model-spec.js';
@@ -6,6 +7,21 @@ import {nativeGroup,modelModule} from '../public/three-model.js';
 import {meshScene} from '../public/viewport-geometry.js';
 
 const model={name:'木亭',parts:[{name:'斜屋顶',geometry:'ExtrudeGeometry',profile:[[-1,0],[1,0],[0,1]],position:[0,3,0],size:[6,2,4],rotation:[0,30,0],color:'#aa8855'}]};
+test('墙体孔洞可穿透，编辑与导出的模块保留同一轮廓',async()=>{
+ const part={...model.parts[0],name:'开窗墙',position:[0,0,0],rotation:[0,0,0],size:[4,4,.2],profile:[[-2,-2],[2,-2],[2,2],[-2,2]],holes:[[[-1,-1],[1,-1],[1,1],[-1,1]]]};
+ const spec=validateModel({name:'立面',parts:[part]}),objects=modelParts(spec,'wall','v1');
+ assert.deepEqual(readPart(objects[0]),spec.parts[0]);
+ const source=modelModule(objects,spec.name).replace("'three'",JSON.stringify(import.meta.resolve('three')));
+ const exported=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+ for(const group of [nativeGroup(objects),exported.buildModel()]){
+  group.updateMatrixWorld(true);
+  const hit=x=>new Raycaster(new Vector3(x,0,2),new Vector3(0,0,-1)).intersectObjects(group.children).length;
+  assert.equal(hit(0),0);assert.ok(hit(1.5)>0);
+ }
+ for(const holes of [[[[1,1],[3,1],[3,3]]],[part.holes[0],part.holes[0]],[[[0,0],[1,1],[0,1],[1,0]]]]){
+  assert.throws(()=>validateModel({name:'立面',parts:[{...part,holes}]}));
+ }
+});
 test('语言模型以一次对话请求生成结构，可在下一次描述中继续修改',async t=>{
  t.mock.method(globalThis,'fetch',async(url,opts)=>{
   assert.equal(url,'https://api.deepseek.com/chat/completions');assert.equal(opts.headers.Authorization,'Bearer model-test-key');

@@ -186,7 +186,7 @@ async function resourceUrl(asset,fresh=false) {
 const jobTitle=job=>tasks[job.task]?.[0] || job.task || 'Atlas 任务';
 const jobKey=job=>job.id;
 function defaults() {
-  return {minimaxModel:'MiniMax-M3.1-Flash',qwenModel:'qwen3-coder-flash',targetModel:'new',hunyuanMode:'text',hunyuanModel:'3.1',wanSize:'1280*1280',meshTexture:true,provider:'atlas',ratio:'16:9',n:1,enhance:true,returnDepth:true,resolution:'1280x720',canonical:true,
+  return {modelDetail:'standard',minimaxModel:'MiniMax-M3.1-Flash',qwenModel:'qwen3-coder-flash',targetModel:'new',hunyuanMode:'text',hunyuanModel:'3.1',wanSize:'1280*1280',meshTexture:true,provider:'atlas',ratio:'16:9',n:1,enhance:true,returnDepth:true,resolution:'1280x720',canonical:true,
     prompt:'',images:[],sources:[],targets:'current',count:24,chisel:'layout',refine:false,textureMode:'image_texture',textureSize:4096};
 }
 
@@ -497,7 +497,7 @@ export function mountWorkflows(container,ctx) {
       const groups=new Map((current().scene?.objects||[]).filter(o=>o.type==='three'&&o.group).map(o=>[o.group,o.groupName]));
       const choices=[['new','新建模型'],...groups];
       if(draft.targetModel!=='new'&&!groups.has(draft.targetModel))choices.push([draft.targetModel,'原模型已移除，请重新选择']);
-      form.append(options('建模目标','targetModel',choices),
+      form.append(row(options('建模目标','targetModel',choices),options('建模细节','modelDetail',[['standard','标准 · 主体与比例'],['fine','精细 · 开口与构造']])),
         textField('建模描述','prompt',draft.referenceImage?'可选：指定实际尺寸、材质，或说明希望保留和修改的部分。':'例如：建一座六米宽的双坡木亭，四根柱子，屋脊朝东西。','textarea',{rows:4,maxLength:6000}));
     }
     else if(task==='hunyuanTo3D'){
@@ -609,7 +609,7 @@ export function mountWorkflows(container,ctx) {
     if(t==='threeModel'){
       const prompt=d.prompt?.trim()||'';must(prompt||d.referenceImage,'请填写建模描述或选择参考图。');
       const modelField=languageServices[d.provider].modelField;
-      const input={prompt,...(modelField?{model:d[modelField]}:{})};
+      const input={prompt,...(d.modelDetail==='fine'?{modelDetail:'fine'}:{}),...(modelField?{model:d[modelField]}:{})};
       if(d.referenceImage){must(localReference(d.referenceImage.url),'参考图无法读取，请重新选择。');input.referenceImage=d.referenceImage.url;if(d.provider==='qwen')input.model='qwen3-vl-plus';}
       if(d.targetModel==='new')return input;
       const previous=ctx.getModel(p,d.targetModel);must(previous,'原模型已移除，请重新选择建模目标。');
@@ -710,7 +710,7 @@ export function mountWorkflows(container,ctx) {
     try {
       const input=await prepare(t,d,p);
       const id=crypto.randomUUID(),job={id,requestId:id, task:t,provider:d.provider,input,status:'submitting',createdAt:new Date().toISOString()};
-      if(t==='threeModel'){job.prompt=input.prompt;if(d.referenceImage)job.referenceImage={...d.referenceImage};if(input.previous){job.modelGroup=d.targetModel;job.modelBase=input.previous;}}
+      if(t==='threeModel'){job.prompt=input.prompt;job.modelDetail=d.modelDetail;if(d.referenceImage)job.referenceImage={...d.referenceImage};if(input.previous){job.modelGroup=d.targetModel;job.modelBase=input.previous;}}
       expanded.add(id);addJob(p.id,job);
       await ctx.flushProject?.(p.id);await dispatch(p.id,job);
     } catch(e){if(viewKey()===key)say(messageOf(e),true);}
@@ -845,7 +845,7 @@ export function mountWorkflows(container,ctx) {
     },pid));
     if(response.threeModel){
       const model=response.threeModel;
-      body.append(dom('strong',null,model.name+' · '+model.parts.length+' 个构件'),dom('p','wf-hint',(response.model||'')+(job.prompt?' · '+job.prompt:'')));
+      body.append(dom('strong',null,model.name+' · '+model.parts.length+' 个构件'),dom('p','wf-hint',(response.model||'')+(job.modelDetail==='fine'?' · 精细建模':'')+(job.prompt?' · '+job.prompt:'')));
       if(job.referenceImage)body.append(dom('p','wf-hint','参考图 · '+job.referenceImage.name));
       if(!job.modelApplied)controls.prepend(action(job.modelConflict?'作为新模型加入':'加入场景',()=>{
         ctx.installModel(pid,job.id,!!job.modelConflict);render();
