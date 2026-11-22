@@ -1,8 +1,9 @@
+import {cleanSessionContext} from './public/model-session.js';
 import {randomUUID} from 'node:crypto';
 import {inlineReference} from './model-reference.mjs';
 import {validWorkspace} from './domestic-providers.mjs';
 import {fail} from './storage.mjs';
-import {geometryTypes,validateModel} from './public/model-spec.js';
+import {geometryTypes,validateModel,MeshIndexError} from './public/model-spec.js';
 
 const jsonOptions={response_format:{type:'json_object'},max_tokens:8192};
 const services={
@@ -34,6 +35,7 @@ const instructions=[
  '支持 Three.js 几何类型：'+geometryTypes.join('、')+'。Box、Cylinder、Cone、Sphere、Torus 都以构件中心定位，圆柱和圆锥轴向为 Y，圆环位于 XY。',
  'ExtrudeGeometry 提供 profile:[[x,y],...]，至少三个不同的点形成简单闭合轮廓，沿 Z 挤出。LatheGeometry 的 profile 为 [[非负半径,y],...]，以 Y 为轴旋转。每种几何均居中、缩放到 size，然后旋转、平移。',
  '自由曲面或不规则多面体可以使用 BufferGeometry，通过 vertices:[[x,y,z],...] 和 triangles:[[a,b,c],...] 给出顶点和从零开始的索引，正面按逆时针排列。每件最多 256 个顶点、512 个三角面。',
+ '优先使用能表达外形的原生几何或挤出轮廓。确需 BufferGeometry 时，写 indexBase:0。N 个顶点的合法索引是 0 到 N-1；每个面引用三个不同的现有顶点。例如四个顶点可组成 [[0,1,2],[0,2,3]]。',
  '格式示例：{"name":"圆凳","parts":[{"name":"凳面","geometry":"CylinderGeometry","position":[0,0.45,0],"size":[0.4,0.06,0.4],"rotation":[0,0,0],"color":"#966e45"}]}。',
  '重复的栏杆、门窗、台阶可以用可选字段 repeat:{count:整数,step:[dx,dy,dz]} 表示线性阵列。展开后最多 96 个构件，每条轮廓最多 48 个点。为构件起简洁可辨的中文名称。',
  '新增模型放在原点附近，主体落地。用户给出现有模型时，在同一坐标系中返回修改后的完整模型，保留未提及的构件、位置和材质。请返回完整 JSON 数据。'
@@ -55,10 +57,12 @@ export async function generateModel(provider,task,input,mediaDirectory){
  if(!service.models.includes(model))throw fail(400,'所选服务不支持此建模模型');
  if(hasImage&&provider==='qwen'&&model!=='qwen3-vl-plus')throw fail(400,'千问参考图建模请选择 Qwen3-VL-Plus');
  const request=prompt||'依据参考图建立可编辑的三维模型。';
- const text=JSON.stringify({request,...(previous?{previous}:{})});
+ const session=cleanSessionContext(input.session);
+ const text=JSON.stringify({request,...(previous?{previous}:{}),...(session?{projectSession:session}:{})});
  const contentBlocks=hasImage?[{type:'text',text},{type:'image_url',image_url:{url:await inlineReference(mediaDirectory,input.referenceImage),...(fine&&provider!=='qwen'?{detail:'high'}:{})}}]:text;
  const visualGuide='观察参考图中的主体、轮廓、构件连接、比例和材质，优先表达这些可辨认特征。按文字给出的实际尺寸建模，未给尺寸时估算。续改已有模型时，仅按用户要求调整。';
  const guides=[instructions,'挤出构件可指定 holes:[[[x,y],...],...] 表示贯穿开孔。所有孔在外轮廓内部且不相交，最多 12 个。'];
+ if(session)guides.push('projectSession 是此工程的建模会话。延续 requirements 中的长期要求，以及 turns 中当前模型已采用的设计。previous 是用户手动编辑后的当前几何，优先于历史描述。本轮 request 对要修改的内容有优先权。models 是场景中其他模型的简要参考，新建时勿重复生成它们。');
  if(hasImage)guides.push(visualGuide);
  if(fine)guides.push('精细建模。先校核主体的比例与结构连接，再用可独立编辑的构件表达看得见的檐口、窗框、栏杆或材质边界。窗洞使用 holes，通向边界的门洞用带凹口的外轮廓。重复构件用 repeat。依据主体选择有辨识度的细节，不必用完构件额度，保持原模型坐标。');
  const payload={model,...service.options(model),messages:[{role:'system',content:guides.join('\n')},{role:'user',content:contentBlocks}]};
@@ -76,8 +80,18 @@ export async function generateModel(provider,task,input,mediaDirectory){
   const fenced=/^`{3}(?:json)?\s*\n([\s\S]+?)\n\s*`{3}$/i.exec(content);
   if(fenced)content=fenced[1];
  }
- let result;
- try{result=validateModel(JSON.parse(content))}catch(e){throw fail(422,'无法构建 Three.js 模型：'+(e instanceof SyntaxError?'输出不是完整 JSON':e.message))}
- return {id:'model_'+randomUUID(),done:true,response:{model:body.model||model,threeModel:result}};
+ const op={id:'model_'+randomUUID(),done:true,response:{model:body.model||model}};
+ let raw;
+ try{
+  raw=JSON.parse(content);
+  op.response.threeModel=validateModel(raw);
+ }catch(e){
+  if(!(e instanceof MeshIndexError))throw fail(422,'无法构建 Three.js 模型：'+(e instanceof SyntaxError?'输出不是完整 JSON':e.message));
+  // Keep the provider's geometry so the receipt can be inspected offline.
+  op.response.originalModel=raw;op.response.meshIssues=[];
+  try{op.response.threeModel=validateModel(raw,{meshIssues:op.response.meshIssues})}
+  catch(recoveryError){op.error={code:'INVALID_MESH',message:e.message+'。'+recoveryError.message}}
+ }
+ return op;
 }
 

@@ -20,6 +20,10 @@ globalThis.fetch=async(url,options)=>{
  }
  const model=input.previous?structuredClone(input.previous):{name:'文字生成木亭',parts:[roof]};
  if(input.previous)model.parts[0].size[1]=1.8;
+ if(input.request==='模拟坏面'||input.request==='模拟全坏网格'){
+  const triangles=input.request==='模拟坏面'?[[0,1,2],[0,2,10]]:[[0,2,10]];
+  model.parts=[{...roof,geometry:'BufferGeometry',vertices:[[0,0,0],[1,0,0],[0,1,0]],triangles}];
+ }
  return Response.json({model:body.model,choices:[{finish_reason:'stop',message:{content:JSON.stringify(model)}}]});
 };
 

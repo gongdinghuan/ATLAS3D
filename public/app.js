@@ -183,7 +183,7 @@ function installModel(pid,jobId,asNew=false){
  const p=projects.find(item=>item.id===pid),job=p?.jobs.find(item=>item.id===jobId);
  if(!job||p!==project||job.modelApplied)return;
  const model=validateModel(job.response.threeModel);
- const target=asNew?null:job.modelGroup;
+ const target=asNew||job.response.meshIssues?.length?null:job.modelGroup;
  if(target&&JSON.stringify(getModel(p,target))!==JSON.stringify(job.modelBase)){
   job.modelConflict=true;job.note='提交后原模型已更改。可以将生成结果作为新模型加入场景。';queue(p);return;
  }
@@ -273,7 +273,7 @@ async function init(){
  view=createViewport($('#scene'),{onSelect:id=>{if(!project)return;project.scene.selectedId=id;view.setScene(project.scene);renderSide();queue(project)},onCameraChange:cam=>{if(!project)return;stopPlay();project.camera=cam;chosenCamera=null;cameraFields();queue(project)}});
  if(!projects.length){const p=makeProject('庭院展亭');projects.push(p);queue(p)}
  choose(projects.find(p=>p.id===localStorage.getItem('atlas-active'))||projects[0]);
- workflow=mountWorkflows($('#workflow-root'),{getProject:()=>project,updateProject,getModel,installModel,downloadModel,showScene:()=>$('#generate-dialog').close(),saveDraft:(pid,t,d)=>{const p=projects.find(x=>x.id===pid);if(!p)return;p.workflowDrafts||={};p.workflowDrafts[t]=d;p.activeTask=t;queue(p)},flushProject:async id=>{await saveOne(id);if(issues.has(id))throw issues.get(id)},showPointCloud, getAtlasCamera:orbitToAtlasCamera,getPathCameras:(count=24)=>{if(!project.cameras.length)return [];const n=Math.max(1,Math.min(1440,Math.trunc(count)||24));return Array.from({length:n},(_,i)=>orbitToAtlasCamera(alongPath(project.cameras,i/Math.max(1,n-1))))},notify,getSnapshot:()=>view.snapshot(),getDepthSnapshot:camera=>view.captureDepth(camera||view.getCamera(),1280,720),addAsset});
+ workflow=mountWorkflows($('#workflow-root'),{getProject:()=>project,updateProject,getModel,installModel,downloadModel,showScene:()=>$('#generate-dialog').close(),saveDraft:(pid,t,d,markActive=true)=>{const p=projects.find(x=>x.id===pid);if(!p)return;p.workflowDrafts||={};p.workflowDrafts[t]=d;if(markActive)p.activeTask=t;queue(p)},flushProject:async id=>{await saveOne(id);if(issues.has(id))throw issues.get(id)},showPointCloud, getAtlasCamera:orbitToAtlasCamera,getPathCameras:(count=24)=>{if(!project.cameras.length)return [];const n=Math.max(1,Math.min(1440,Math.trunc(count)||24));return Array.from({length:n},(_,i)=>orbitToAtlasCamera(alongPath(project.cameras,i/Math.max(1,n-1))))},notify,getSnapshot:()=>view.snapshot(),getDepthSnapshot:camera=>view.captureDepth(camera||view.getCamera(),1280,720),addAsset});
  workflow.refresh();
  if(project.editor?.generationOpen)openGeneration(project.activeTask);
  if(restored.length)notify('已恢复上次尚未写入磁盘的编辑');

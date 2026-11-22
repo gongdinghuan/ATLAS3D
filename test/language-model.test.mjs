@@ -22,6 +22,33 @@ test('墙体孔洞可穿透，编辑与导出的模块保留同一轮廓',async(
   assert.throws(()=>validateModel({name:'立面',parts:[{...part,holes}]}));
  }
 });
+test('重复索引、平铺索引和一基索引归一为可渲染且可导出的三角面',async()=>{
+ const vertices=[[0,0,0],[1,0,0],[1,1,0],[0,1,0]];
+ const source={...model.parts[0],geometry:'BufferGeometry',vertices};
+ const normalized=(triangles,more={})=>validateModel({name:'面板',parts:[{...source,triangles,...more}]});
+ for(const triangles of [[0,1,2,0,2,3],[[0,1,2],[1,1,2],[0,2,3]],[['1','2','3'],['1','3','4']]]){
+  const result=normalized(triangles);
+  assert.deepEqual(result.parts[0].triangles,[[0,1,2],[0,2,3]]);
+  const objects=modelParts(result,'g','v'),group=nativeGroup(objects);assert.equal(group.children[0].geometry.index.count,6);
+  const module=modelModule(objects,'面板').replace("'three'",JSON.stringify(import.meta.resolve('three')));
+  const rebuilt=(await import('data:text/javascript;base64,'+Buffer.from(module).toString('base64'))).buildModel();
+  assert.deepEqual([...rebuilt.children[0].geometry.index.array],[0,1,2,0,2,3]);
+ }
+ assert.deepEqual(normalized([[1,2,3]]).parts[0].triangles,[[1,2,3]]);
+ assert.deepEqual(normalized([[1,2,3]],{indexBase:1}).parts[0].triangles,[[0,1,2]]);
+ assert.throws(()=>normalized([[0,1,2],[0,2,4]]),/第 2 个面.*0–3/);
+});
+test('网格越界时仅请求一次，原始 JSON 与明确标注的可用部分存入结果',async t=>{
+ process.env.MINIMAX_API_KEY='fixture';
+ const part={...model.parts[0],geometry:'BufferGeometry',vertices:[[0,0,0],[1,0,0],[0,1,0]],triangles:[[0,1,2],[0,2,9]]};
+ const raw={name:'木亭',parts:[model.parts[0],part]};
+ const fetch=t.mock.method(globalThis,'fetch',async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(raw)}}]}));
+ const submit=()=>handleProvider('POST','/api/tasks',{provider:'minimax',task:'threeModel',input:{prompt:'按图续改'}});
+ const a=await submit();assert.deepEqual(a.response.originalModel,raw);assert.ok(a.response.meshIssues[0].includes('第 2 个面'));
+ assert.deepEqual(a.response.threeModel.parts[1].triangles,[[0,1,2]]);assert.equal(fetch.mock.callCount(),1);
+ part.triangles=[[0,0,1]];const b=await submit();assert.equal(b.response.threeModel.parts.length,1);assert.equal(b.response.meshIssues.length,1);
+ raw.parts=[part];const c=await submit();assert.equal(c.error.code,'INVALID_MESH');assert.equal(c.response.threeModel,undefined);assert.deepEqual(c.response.originalModel,raw);
+});
 test('语言模型以一次对话请求生成结构，可在下一次描述中继续修改',async t=>{
  t.mock.method(globalThis,'fetch',async(url,opts)=>{
   assert.equal(url,'https://api.deepseek.com/chat/completions');assert.equal(opts.headers.Authorization,'Bearer model-test-key');

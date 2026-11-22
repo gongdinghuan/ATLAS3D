@@ -11,6 +11,12 @@
   color-scheme: dark;
   font: 13px/1.5 "Segoe UI", "Microsoft YaHei UI", sans-serif;
 }
+.wf-session { border: 1px solid var(--wf-border); border-radius: 8px; padding: 8px 12px; }
+.wf-session summary { cursor: pointer; }
+.wf-session[open] .wf-field { margin-top: 9px; }
+.wf-session-list { list-style: none; padding: 0; margin: 0; max-height: 210px; overflow: auto; }
+.wf-turn { border-top: 1px solid var(--wf-border); padding: 7px 0; overflow-wrap: anywhere; }
+.wf-turn p { white-space: pre-wrap; }
 .wf-reference { margin: 0; padding: 9px 12px 12px; border: 1px dashed var(--wf-border); border-radius: 8px; min-width: 0; }
 .wf-reference legend { padding: 0 5px; color: #dce9e5; }
 .wf-ref-line { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; }

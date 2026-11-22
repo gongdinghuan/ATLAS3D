@@ -94,7 +94,9 @@ test('browser exercises project isolation, uploads, cancellation, paths, depth, 
   for(const path of candidates){try{await access(path);browser=path;break;}catch{}}
   if(!browser){t.skip('Set ATLAS_TEST_BROWSER to a Chromium executable.');return;}
   const module=await readFile(new URL('../public/workflows.js',import.meta.url),'utf8');
+  const sessionModule=await readFile(new URL('../public/model-session.js',import.meta.url),'utf8');
   const server=createServer((req,res)=>{
+    if(req.url==='/model-session.js'){res.setHeader('content-type','text/javascript; charset=utf-8');res.end(sessionModule);return;}
     if(req.url==='/workflows.js'){res.setHeader('content-type','text/javascript; charset=utf-8');res.end(module);return;}
     if(req.url!=='/'){res.writeHead(404);res.end();return;}
     res.setHeader('content-type','text/html; charset=utf-8');

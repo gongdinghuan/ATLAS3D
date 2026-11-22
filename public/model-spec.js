@@ -42,7 +42,42 @@ function validateHoles(outer,raw){
  }
  return holes;
 }
-export function validateModel(value){
+export class MeshIndexError extends Error {}
+
+function normalizeMeshFaces(raw,part,issues){
+ const {name,vertices}=part,limit=vertices.length;
+ const problem=message=>new MeshIndexError('构件「'+name+'」：'+message);
+ let faces=raw.triangles;
+ if(!Array.isArray(faces)||!faces.length||faces.length>1536)throw problem('需要 1–512 个三角面');
+ if(faces.every(i=>!Array.isArray(i))){
+  if(faces.length%3!==0)throw problem('平铺索引的数量必须为 3 的倍数');
+  faces=Array.from({length:faces.length/3},(_,i)=>faces.slice(3*i,3*i+3));
+ }
+ if(faces.length>512)throw problem('超过 512 个三角面');
+ const asIndex=i=>typeof i==='string'&&/^\d+$/.test(i)?Number(i):i;
+ const rows=faces.map(f=>Array.isArray(f)&&f.length===3?f.map(asIndex):null);
+ const indices=rows.filter(Boolean).flat();
+ const base=raw.indexBase??(indices.includes(limit)&&indices.every(i=>Number.isSafeInteger(i)&&i>=1&&i<=limit)?1:0);
+ if(base!==0&&base!==1)throw problem('indexBase 必须是 0 或 1');
+ const triangles=[];
+ let bad=0,firstError='';
+ for(const [n,row] of rows.entries()){
+  if(!row||!row.every(i=>Number.isSafeInteger(i)&&i>=base&&i<limit+base)){
+   const range=base+'–'+(limit+base-1);
+   const message='第 '+(n+1)+' 个面的索引无效，需要 3 个 '+range+' 范围内的整数';
+   if(!issues)throw problem(message);
+   bad++;firstError ||= message;continue;
+  }
+  const face=row.map(i=>i-base);
+  // A triangle with a repeated vertex contributes no surface.
+  if(new Set(face).size===3)triangles.push(face);
+ }
+ if(!triangles.length)throw problem('没有可用的三角面'+(firstError?'。'+firstError:'，顶点索引重复'));
+ if(bad)issues.push('「'+name+'」跳过 '+bad+' 个无效面，保留 '+triangles.length+' 个面。'+firstError);
+ return triangles;
+}
+
+export function validateModel(value,{meshIssues}={}){
  const name=nameOf(value?.name);
  requireValue(Array.isArray(value.parts)&&value.parts.length>=1&&value.parts.length<=96,'模型需要 1–96 个构件');
  const parts=[];
@@ -64,11 +99,11 @@ export function validateModel(value){
   if(part.geometry==='BufferGeometry'){
    requireValue(Array.isArray(raw.vertices)&&raw.vertices.length>=3&&raw.vertices.length<=256,'自定义网格需要 3–256 个顶点');
    part.vertices=raw.vertices.map(v=>vector(v,3,-10000,10000,'网格顶点'));
-   requireValue(Array.isArray(raw.triangles)&&raw.triangles.length>=1&&raw.triangles.length<=512,'自定义网格需要 1–512 个三角面');
-   part.triangles=raw.triangles.map(face=>{
-    requireValue(Array.isArray(face)&&face.length===3&&new Set(face).size===3&&face.every(i=>Number.isInteger(i)&&i>=0&&i<part.vertices.length),'三角面需要三个不同的有效顶点索引');
-    return face.slice();
-   });
+   try{part.triangles=normalizeMeshFaces(raw,part,meshIssues)}
+   catch(e){
+    if(!meshIssues||!(e instanceof MeshIndexError))throw e;
+    meshIssues.push(e.message+'。此构件未加入预览');continue;
+   }
   }
   const count=raw.repeat?.count??1;
   requireValue(Number.isInteger(count)&&count>=1&&parts.length+count<=96,'展开后最多允许 96 个构件');
@@ -78,6 +113,7 @@ export function validateModel(value){
    parts.push({...part,position,name:count===1?part.name:part.name.slice(0,94)+' '+(i+1)});
   }
  }
+ if(!parts.length)throw new MeshIndexError('没有可构建的网格构件');
  return {name,parts};
 }
 export function modelParts(model,group,version){

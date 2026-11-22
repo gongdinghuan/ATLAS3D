@@ -1,3 +1,5 @@
+import {buildSessionContext,currentTurn,resumeTarget,sessionTurns} from './model-session.js';
+
 const tasks = {
   threeModel: ['文字建模','直接调用语言模型生成 Three.js 网格，可在白模中逐件编辑。',''],
   hunyuanTo3D: ['混元 3D','使用腾讯混元专业版，将文字或参考图生成三维模型。',''],
@@ -131,7 +133,7 @@ export function mergeOperation(job, op) {
   const cancelled=/cancel/i.test([op.error?.code,op.error?.status,op.error?.message,op.metadata?.state].join(' '));
   const status=op.done ? (op.error ? (cancelled ? 'cancelled':'failed') : 'succeeded') : (job.status==='cancelling' ? 'cancelling':'running');
   return {...job,operationId:op.id,status,metadata:op.metadata, response:op.response ?? undefined,
-    error:op.error ? messageOf(op.error) : undefined, pollError:undefined, pollPaused:false, input:undefined};
+    error:op.error ? messageOf(op.error) : undefined, pollError:undefined, pollPaused:false, input:op.error&&job.task==='threeModel'?job.input:undefined};
 }
 
 async function api(path, method='GET', body) {
@@ -233,11 +235,21 @@ export function mountWorkflows(container,ctx) {
   let projectId=null, task='atlasTextToImage', providers=[], providerError='', loading=null, draft;
   const drafts=new Map(), pending=new Set(), timers=new Map(), polling=new Set(), fileAssets=new WeakMap();
   const expanded=new Set(), recovering=new Set(), loadingReference=new WeakSet();
-  function draftFor(p,t){return {...defaults(),...(p.workflowDrafts?.[t]||{})}}
+  const openSessions=new Set();
+  let sessionSummary,sessionList;
+  function draftFor(p,t){
+    const saved=p.workflowDrafts?.[t]||{},d={...defaults(),...saved};
+    if(t==='threeModel'&&!Object.hasOwn(saved,'targetModel')){
+      d.targetModel=resumeTarget(p);
+      const last=(p.jobs||[]).find(j=>j.id===currentTurn(p,d.targetModel));
+      if(last&&!Object.hasOwn(saved,'referenceImage'))d.referenceImage=last.referenceImage||null;
+    }
+    return d;
+  }
   function saveDraft(d=draft,t=task,pid=projectId){
     if(!d||!pid||!ctx.saveDraft)return;
     const copy=structuredClone(d);
-    ctx.saveDraft(pid,t,copy);
+    ctx.saveDraft(pid,t,copy,pid===projectId&&t===task);
   }
   for(const event of ['input','change','click','pointerup'])form.addEventListener(event,()=>queueMicrotask(()=>saveDraft()));
 
@@ -251,11 +263,11 @@ export function mountWorkflows(container,ctx) {
       const idx=(p.jobs || []).findIndex(j=>jobKey(j)===id);
       if (idx>=0) p.jobs[idx]=updater(p.jobs[idx]);
     },pid);
-    if (current()?.id===pid) renderHistory();
+    if (current()?.id===pid){renderHistory();refreshSession();}
   }
   function addJob(pid,job) {
     ctx.updateProject(p=>{p.jobs ||= [];p.jobs.unshift(job);},pid);
-    if (current()?.id===pid) renderHistory();
+    if (current()?.id===pid){renderHistory();refreshSession();}
   }
   function updateRun() {
     const p=providers.find(x=>x.id===draft?.provider);
@@ -488,8 +500,41 @@ export function mountWorkflows(container,ctx) {
     }
     return group;
   }
+  function refreshSession(){
+    if(task!=='threeModel'||!sessionList?.isConnected)return;
+    const project=current(),turns=sessionTurns(project);
+    sessionSummary.textContent='本地建模会话 · '+turns.length+' 轮';
+    if(!openSessions.has(projectId))return;
+    sessionList.replaceChildren();
+    const liveVersions=new Set((project.scene?.objects||[]).map(part=>part.modelVersion));
+    for(const j of turns.slice().reverse()){
+      const entry=dom('li','wf-turn'),result=j.response?.threeModel;
+      const state=j.modelApplied?(liveVersions.has(j.id)?'场景当前版本':'已采用的历史版本'):(stateNames[j.status]||j.status);
+      const time=new Date(j.createdAt).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+      entry.append(dom('small','wf-hint',time+' · '+(languageServices[j.provider]?.label||j.provider)+' · '+state),
+        dom('p',null,j.prompt||j.input?.prompt||'按参考图建模'));
+      if(j.referenceImage?.name)entry.append(dom('small','wf-hint','参考图 · '+j.referenceImage.name));
+      if(result)entry.append(dom('p','wf-hint',result.name+' · '+result.parts.length+' 个构件'+(j.response.meshIssues?.length?' · 部分可用':'')));
+      if(j.error)entry.append(dom('p','wf-hint',j.error));
+      sessionList.append(entry);
+    }
+  }
+  function sessionPanel(){
+    const p=current(),panel=dom('details','wf-session');
+    sessionSummary=dom('summary');sessionList=dom('ol','wf-session-list');
+    const notes=dom('textarea','wf-input');notes.rows=2;notes.maxLength=3000;
+    notes.value=p.modelSession?.requirements||'';notes.placeholder='例如：外墙采用清水混凝土，标准层高 3.6 米。';
+    notes.oninput=()=>ctx.updateProject(target=>{
+      target.modelSession={...target.modelSession,requirements:notes.value};
+    },p.id);
+    panel.open=openSessions.has(p.id);
+    panel.append(sessionSummary,field('工程长期要求',notes,'保存于本机。每次建模都会把这些要求发给所选模型。'),sessionList);
+    panel.ontoggle=()=>{if(!panel.isConnected)return;if(panel.open)openSessions.add(p.id);else openSessions.delete(p.id);refreshSession();if(panel.open)sessionList.scrollTop=sessionList.scrollHeight};
+    return panel;
+  }
   function renderFields() {
     if(task==='threeModel'){
+      form.append(sessionPanel());refreshSession();
       form.append(referencePicker());
       if(draft.provider==='qwen'&&draft.referenceImage)form.append(field('千问模型',dom('output',null,'Qwen3-VL-Plus · 视觉建模')));
       else if(draft.provider==='qwen')form.append(options('千问模型','qwenModel',[['qwen3-coder-flash','Qwen3-Coder-Flash'],['qwen-plus','Qwen-Plus']]));
@@ -497,7 +542,12 @@ export function mountWorkflows(container,ctx) {
       const groups=new Map((current().scene?.objects||[]).filter(o=>o.type==='three'&&o.group).map(o=>[o.group,o.groupName]));
       const choices=[['new','新建模型'],...groups];
       if(draft.targetModel!=='new'&&!groups.has(draft.targetModel))choices.push([draft.targetModel,'原模型已移除，请重新选择']);
-      form.append(row(options('建模目标','targetModel',choices),options('建模细节','modelDetail',[['standard','标准 · 主体与比例'],['fine','精细 · 开口与构造']])),
+      form.append(row(field('建模目标',select(choices,draft.targetModel,id=>{
+        draft.targetModel=id;
+        const version=currentTurn(current(),id),turn=version&&(current().jobs||[]).find(j=>j.id===version);
+        if(turn)draft.referenceImage=turn.referenceImage||null;
+        render();saveDraft();
+      })),options('建模细节','modelDetail',[['standard','标准 · 主体与比例'],['fine','精细 · 开口与构造']])),
         textField('建模描述','prompt',draft.referenceImage?'可选：指定实际尺寸、材质，或说明希望保留和修改的部分。':'例如：建一座六米宽的双坡木亭，四根柱子，屋脊朝东西。','textarea',{rows:4,maxLength:6000}));
     }
     else if(task==='hunyuanTo3D'){
@@ -611,6 +661,7 @@ export function mountWorkflows(container,ctx) {
       const modelField=languageServices[d.provider].modelField;
       const input={prompt,...(d.modelDetail==='fine'?{modelDetail:'fine'}:{}),...(modelField?{model:d[modelField]}:{})};
       if(d.referenceImage){must(localReference(d.referenceImage.url),'参考图无法读取，请重新选择。');input.referenceImage=d.referenceImage.url;if(d.provider==='qwen')input.model='qwen3-vl-plus';}
+      const session=buildSessionContext(p,d.targetModel);if(session)input.session=session;
       if(d.targetModel==='new')return input;
       const previous=ctx.getModel(p,d.targetModel);must(previous,'原模型已移除，请重新选择建模目标。');
       return {...input,previous};
@@ -710,7 +761,7 @@ export function mountWorkflows(container,ctx) {
     try {
       const input=await prepare(t,d,p);
       const id=crypto.randomUUID(),job={id,requestId:id, task:t,provider:d.provider,input,status:'submitting',createdAt:new Date().toISOString()};
-      if(t==='threeModel'){job.prompt=input.prompt;job.modelDetail=d.modelDetail;if(d.referenceImage)job.referenceImage={...d.referenceImage};if(input.previous){job.modelGroup=d.targetModel;job.modelBase=input.previous;}}
+      if(t==='threeModel'){job.parentTurnId=currentTurn(p,d.targetModel);job.prompt=input.prompt;job.modelDetail=d.modelDetail;if(d.referenceImage)job.referenceImage={...d.referenceImage};if(input.previous){job.modelGroup=d.targetModel;job.modelBase=input.previous;}}
       expanded.add(id);addJob(p.id,job);
       await ctx.flushProject?.(p.id);await dispatch(p.id,job);
     } catch(e){if(viewKey()===key)say(messageOf(e),true);}
@@ -727,6 +778,14 @@ export function mountWorkflows(container,ctx) {
       editJob(pid,job.id,j=>({...j,status:'uncertain',note:'本地服务在等待远端回复时中断。请核对原任务。'}))
     }catch(e){if(e.status===404){editJob(pid,job.id,j=>({...j,status:'uncertain',note:'本机尚无提交回执，可用原请求编号继续。'}))}else if(current()?.id===pid)say(messageOf(e),true)}
     finally{recovering.delete(key)}
+  }
+  function continueGroup(pid,job,group,manual=false){
+    if(!group||current()?.id!==pid)return;
+    const key=viewKey(pid,'threeModel'),d=drafts.get(key)||draftFor(current(),'threeModel');
+    const samePrompt=d.prompt.trim()===job.prompt&&d.referenceImage?.url===job.referenceImage?.url;
+    if(!manual&&d.targetModel!==(job.modelGroup||'new'))return;
+    d.targetModel=group;if(samePrompt)d.prompt='';
+    drafts.set(key,d);saveDraft(d,'threeModel',pid);
   }
   async function dispatch(pid,job,receipt) {
     const key=pid+'/'+job.id;if(sending.has(key))return;
@@ -745,12 +804,10 @@ export function mountWorkflows(container,ctx) {
         }
       }
       editJob(pid,job.id,j=>({...mergeOperation(j,op),note}));
-      if(job.task==='threeModel' && op.done && !op.error && current()?.id===pid){
+      if(job.task==='threeModel' && op.done && !op.error && !op.response?.meshIssues?.length && current()?.id===pid){
         try{
           const group=ctx.installModel(pid,job.id);
-          if(group&&task==='threeModel'&&draft.prompt.trim()===job.prompt&&draft.referenceImage?.url===job.referenceImage?.url&&draft.targetModel===(job.modelGroup||'new')){
-            draft.targetModel=group;draft.prompt='';saveDraft();
-          }
+          continueGroup(pid,job,group);
         }
         catch(e){editJob(pid,job.id,j=>({...j,note:messageOf(e)}));}
         if(current()?.id===pid && task==='threeModel')render();
@@ -843,12 +900,22 @@ export function mountWorkflows(container,ctx) {
     controls.append(action('下载结果 JSON',()=>{
       const url=URL.createObjectURL(new Blob([JSON.stringify(response,null,2)],{type:'application/json'}));download(url,job.id+'-result.json');setTimeout(()=>URL.revokeObjectURL(url),60000);
     },pid));
+    if(response.originalModel){
+      controls.append(action('下载原始网格 JSON',()=>{
+        const url=URL.createObjectURL(new Blob([JSON.stringify(response.originalModel,null,2)],{type:'application/json'}));
+        download(url,job.id+'-geometry.json');setTimeout(()=>URL.revokeObjectURL(url),60000);
+      },pid));
+      for(const issue of response.meshIssues||[])body.append(dom('p','wf-hint',issue));
+      if(!response.threeModel){body.append(controls);return}
+    }
     if(response.threeModel){
       const model=response.threeModel;
       body.append(dom('strong',null,model.name+' · '+model.parts.length+' 个构件'),dom('p','wf-hint',(response.model||'')+(job.modelDetail==='fine'?' · 精细建模':'')+(job.prompt?' · '+job.prompt:'')));
       if(job.referenceImage)body.append(dom('p','wf-hint','参考图 · '+job.referenceImage.name));
-      if(!job.modelApplied)controls.prepend(action(job.modelConflict?'作为新模型加入':'加入场景',()=>{
-        ctx.installModel(pid,job.id,!!job.modelConflict);render();
+      if(!job.modelApplied)controls.prepend(action(response.meshIssues?.length?'将可用部分加入为新模型':job.modelConflict?'作为新模型加入':'加入场景',()=>{
+        const group=ctx.installModel(pid,job.id,!!job.modelConflict||!!response.meshIssues?.length);
+        continueGroup(pid,job,group,true);
+        render();
       },pid));
       else controls.prepend(action('回到场景',()=>ctx.showScene(),pid));
       controls.append(action('下载 Three.js 模型',()=>ctx.downloadModel(model),pid));
@@ -889,7 +956,7 @@ export function mountWorkflows(container,ctx) {
     if(!jobs.length)history.append(dom('p','wf-empty','该项目还没有生成任务。'));
     for(const j of jobs){
       const box=dom('details','wf-job');box.open=expanded.has(j.id);
-      const summary=dom('summary');summary.append(dom('span','wf-job-title',jobTitle(j)+(j.provider==='wan'?' · 通义万相':'')),dom('time',null,new Date(j.createdAt).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})),dom('span','wf-status wf-status-'+j.status,stateNames[j.status] || j.status));
+      const summary=dom('summary');summary.append(dom('span','wf-job-title',jobTitle(j)+(j.provider==='wan'?' · 通义万相':'')),dom('time',null,new Date(j.createdAt).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})),dom('span','wf-status wf-status-'+j.status,j.response?.meshIssues?.length&&j.response.threeModel?'部分可用':stateNames[j.status] || j.status));
       const body=dom('div','wf-job-body');
       box.append(summary,body);history.append(box);
       function fill(){
@@ -898,7 +965,18 @@ export function mountWorkflows(container,ctx) {
         if(j.error || j.pollError)body.append(dom('p','wf-error',j.error || j.pollError));
         if(j.note)body.append(dom('p','wf-hint',j.note));
         if(j.metadata?.state)body.append(dom('small','wf-hint','服务状态 · '+j.metadata.state));
-        if(j.status==='succeeded')showOutputs(j,body,p.id);
+        if(j.status==='succeeded'||j.response?.originalModel)showOutputs(j,body,p.id);
+        if(j.status==='failed'&&j.task==='threeModel'&&j.input){
+          body.append(action('恢复建模表单',()=>{
+            choose('threeModel');
+            draft.prompt=j.input.prompt||'';draft.provider=j.provider;draft.targetModel=j.modelGroup||'new';
+            draft.modelDetail=j.input.modelDetail||j.modelDetail||'standard';
+            draft.referenceImage=j.referenceImage||(j.input.referenceImage?{name:'原任务参考图',url:j.input.referenceImage}:null);
+            if(j.provider==='minimax'&&j.input.model)draft.minimaxModel=j.input.model;
+            if(j.provider==='qwen'&&['qwen-plus','qwen3-coder-flash'].includes(j.input.model))draft.qwenModel=j.input.model;
+            saveDraft();render();form.scrollIntoView({block:'nearest'});say('已恢复原任务的建模设置。');
+          },p.id));
+        }
         if(asynchronousProviders.has(j.provider) && !terminal.has(j.status)){
           const bar=dom('div','wf-output-actions');
           if(j.operationId){
